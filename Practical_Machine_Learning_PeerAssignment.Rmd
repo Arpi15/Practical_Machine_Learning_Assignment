@@ -1,0 +1,152 @@
+---
+title: "Practical Machine Learning Peer Assignment"
+author: "Arpita Mukherjee"
+output: html_document
+---
+
+
+## Overview
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+
+###Downloading data from the link
+
+```{r Downloading Data, results="hide"} 
+fileurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"                  
+download.file(fileurl, destfile = "~/Desktop/coursera/data_ml_project.csv", method = "curl")
+#list.files("./coursera")
+fileurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(fileurl, destfile = "~/Desktop/coursera/test_data_ml_project.csv", method = "curl")
+#list.files("./coursera")
+```
+
+
+###Reading training and test dataset
+
+```{r Reading training and test data}
+training_data <- read.csv("data_ml_project.csv")
+testing_data <- read.csv("test_data_ml_project.csv")
+```
+
+
+Now, lets explore the training dataset
+
+###Exploring Training Dataset
+
+```{r Exploring training data}
+dim(training_data)
+str(training_data)
+head(training_data)
+tail(training_data)
+sum(is.na(training_data))
+```
+
+As we can see that the training dataset has a number of missing values.Lets clean the dataset by ommiting columns with missing values.
+
+```{r Dealing with Missing values}
+training_data <- training_data[ -c(1, 12:35, 49:58, 68:82, 86:100, 102:111, 124:138 ,140:150) ] #removing columns with NA values
+training_data <- training_data[ -c(11, 24, 33, 36, 49)] 
+training_data <- training_data[ -c(33)]
+dim(training_data)
+sum(is.na(training_data))
+```
+
+
+So, now as there are no missing values in our new dataset, we have a much more clean dataset to work with.Lets now split our new dataset into a training set and a validation set.
+
+```{r Creating validation set}
+library(caret)
+library(ggplot2)
+inTrain <- createDataPartition(y = training_data$classe, p = 0.7, list = FALSE)  #perform cross validation using data splitting method
+training_set <- training_data[inTrain, ]
+validation_set <- training_data[-inTrain, ]
+dim(training_set)
+dim(validation_set)
+```
+
+Lets now build a model on our training set and evaluate it on our validation set.
+
+```{r Building Model, cache=TRUE}
+set.seed(2334)
+#1. Random Forest Method
+library(randomForest)
+modelfit <- train(classe ~ ., data = training_set, method = "rf")  #fitting randomforest model
+print(modelfit)
+varImp(modelfit)
+
+#2. GBM Method
+library(gbm)
+modelfit_gbm <- train(classe ~ ., data = training_set, method = "gbm", verbose = FALSE)
+print(modelfit_gbm)
+
+#3. RPART Method
+modelfit_rpart <- train(classe ~ ., data = training_set, method = "rpart")
+print(modelfit_rpart)
+modelfit_rpart$finalModel
+plot(modelfit)   #plotting random forest model
+library(rattle)
+fancyRpartPlot(modelfit_rpart$finalModel)     #plotting cart model
+plot(modelfit_gbm)  #plotting gbm model
+```
+
+
+
+```{r Prediction on Validation set, results="hide"}
+prediction <- predict(modelfit, newdata = validation_set)       #predicting on test set
+prediction
+prediction_gbm <- predict(modelfit_gbm, newdata = validation_set)
+prediction_gbm
+prediction_rpart <- predict(modelfit_rpart, newdata = validation_set)
+prediction_rpart
+```
+
+
+```{r Confusion Matrix}
+confmatrix <- confusionMatrix(prediction, validation_set$classe)$overall[1]      #confusion matrix accuracy
+confmatrix
+confmatrix_gbm <- confusionMatrix(prediction_gbm, validation_set$classe)$overall[1]
+confmatrix_gbm
+confmatrix_rpart <- confusionMatrix(prediction_rpart, validation_set$classe)$overall[1]
+confmatrix_rpart
+```
+
+
+So, as we can see that random forest model gives us the maximum accuracy.So we will use this model to predict on the test set given after removing missing values from test set.Also, the 5 most important variables according to random forest model are -
+
+| raw_timestamp_part_1 | 100.000 |
+|----------------------|---------|
+| num_window           | 44.619  |
+| roll_belt            | 40.572  |
+| pitch_forearm        | 25.787  |
+| magnet_dumbbell_z    | 18.289  |
+
+The OOB estimate of  error rate is expected to be around 0.12%
+
+
+
+```{r Removing missing values from test data}
+sum(is.na(testing_data))
+testing_data <- testing_data[ -c(1, 12:35, 49:58, 68:82, 86:100, 102:111, 124:138 ,140:150) ] #removing columns with NA values in test data
+testing_data <- testing_data[ -c(11, 24, 33, 36, 49)] 
+testing_data <- testing_data[ -c(33)]
+sum(is.na(testing_data))
+```
+
+```{r Predicting on test set}
+prediction_test <- predict(modelfit, testing_data)
+prediction_test
+```
+
+
